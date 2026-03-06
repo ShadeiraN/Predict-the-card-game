@@ -1,0 +1,1647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Predict the Card — AI Supervised Learning Game</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inconsolata:wght@400;600;700&family=Nunito:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --felt: #1a3a2a;
+  --felt-light: #204030;
+  --felt-dark: #0f2018;
+  --gold: #c9a84c;
+  --gold-light: #e8c96a;
+  --cream: #f5f0e8;
+  --card-white: #fefefe;
+  --red: #cc2222;
+  --black: #1a1a1a;
+  --accent-cyan: #4dd9c0;
+  --accent-amber: #f5a623;
+  --text-on-felt: #e8dfc8;
+  --text-dim: #8aaa94;
+  --border-gold: rgba(201,168,76,0.4);
+  --score-green: #52c47a;
+  --score-red: #e05555;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Nunito', sans-serif;
+  background: var(--felt-dark);
+  color: var(--text-on-felt);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Felt texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    radial-gradient(ellipse at 20% 20%, rgba(32,80,50,0.6) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 80%, rgba(10,30,20,0.8) 0%, transparent 60%),
+    url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 3h1v1H1V3zm2-2h1v1H3V1z' fill='rgba(255,255,255,0.02)' fill-rule='evenodd'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+.screen { position: relative; z-index: 1; display: none; min-height: 100vh; }
+.screen.active { display: flex; flex-direction: column; }
+
+/* ====== SHARED COMPONENTS ====== */
+.gold-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  margin: 0.5rem 0;
+}
+
+.pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--border-gold);
+  border-radius: 100px;
+  padding: 0.3rem 0.9rem;
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.72rem;
+  color: var(--gold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(201,168,76,0.08);
+}
+
+/* ====== PLAYING CARD COMPONENT ====== */
+.card {
+  width: 70px;
+  height: 100px;
+  background: var(--card-white);
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 2px 3px 8px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.8);
+  position: relative;
+  flex-shrink: 0;
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: default;
+  user-select: none;
+}
+
+.card.lg {
+  width: 110px;
+  height: 155px;
+  border-radius: 12px;
+  box-shadow: 4px 6px 20px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.9);
+}
+
+.card.xl {
+  width: 140px;
+  height: 200px;
+  border-radius: 14px;
+  box-shadow: 6px 8px 30px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.9);
+}
+
+.card .rank {
+  font-family: 'Playfair Display', serif;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.card .suit-symbol {
+  font-size: 1.2em;
+  line-height: 1;
+}
+
+.card.lg .rank { font-size: 1.8rem; }
+.card.lg .suit-symbol { font-size: 1.6rem; margin-top: 0.2rem; }
+.card.xl .rank { font-size: 2.4rem; }
+.card.xl .suit-symbol { font-size: 2rem; margin-top: 0.3rem; }
+.card .rank { font-size: 1.1rem; }
+.card .suit-small { font-size: 0.9rem; }
+
+.card.red-card .rank, .card.red-card .suit-symbol, .card.red-card .suit-small { color: var(--red); }
+.card.black-card .rank, .card.black-card .suit-symbol, .card.black-card .suit-small { color: var(--black); }
+
+.card-corner-tl {
+  position: absolute;
+  top: 4px; left: 6px;
+  display: flex; flex-direction: column; align-items: center;
+  line-height: 1.1;
+}
+.card-corner-br {
+  position: absolute;
+  bottom: 4px; right: 6px;
+  display: flex; flex-direction: column; align-items: center;
+  line-height: 1.1;
+  transform: rotate(180deg);
+}
+.card-corner-tl .cr, .card-corner-br .cr {
+  font-family: 'Playfair Display', serif;
+  font-weight: 900;
+  font-size: 0.75rem;
+}
+.card-corner-tl .cs, .card-corner-br .cs { font-size: 0.6rem; }
+.card.lg .card-corner-tl .cr, .card.lg .card-corner-br .cr { font-size: 1rem; }
+.card.lg .card-corner-tl .cs, .card.lg .card-corner-br .cs { font-size: 0.8rem; }
+.card.xl .card-corner-tl .cr, .card.xl .card-corner-br .cr { font-size: 1.2rem; }
+.card.xl .card-corner-tl .cs, .card.xl .card-corner-br .cs { font-size: 1rem; }
+
+.card.face-down {
+  background: repeating-linear-gradient(
+    45deg,
+    #1e40af,
+    #1e40af 4px,
+    #1d4ed8 4px,
+    #1d4ed8 8px
+  );
+  border: 2px solid #3b82f6;
+  box-shadow: 2px 3px 8px rgba(0,0,0,0.5);
+}
+.card.face-down::after {
+  content: '🂠';
+  font-size: 3rem;
+  display: none;
+}
+
+.card.face-down.lg {
+  background: repeating-linear-gradient(
+    45deg,
+    #1e3a8a,
+    #1e3a8a 6px,
+    #1e40af 6px,
+    #1e40af 12px
+  );
+}
+
+/* card flip animation */
+@keyframes flipIn {
+  0% { transform: rotateY(90deg) scale(0.9); opacity: 0; }
+  100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+}
+
+.card.flip-in { animation: flipIn 0.4s ease forwards; }
+
+/* ====== INTRO SCREEN ====== */
+#intro {
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  gap: 1.5rem;
+}
+
+.intro-cards-deco {
+  display: flex;
+  gap: -10px;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+  position: relative;
+  height: 130px;
+}
+
+.intro-cards-deco .card {
+  position: absolute;
+  top: 0;
+}
+.intro-cards-deco .card:nth-child(1) { left: calc(50% - 120px); transform: rotate(-15deg); }
+.intro-cards-deco .card:nth-child(2) { left: calc(50% - 55px); transform: rotate(-5deg); z-index: 2; }
+.intro-cards-deco .card:nth-child(3) { left: calc(50% + 10px); transform: rotate(8deg); z-index: 1; }
+.intro-cards-deco .card:nth-child(4) { left: calc(50% + 70px); transform: rotate(18deg); }
+
+h1.game-title {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(2.5rem, 7vw, 5rem);
+  font-weight: 900;
+  color: var(--gold-light);
+  line-height: 1;
+  text-shadow: 0 2px 20px rgba(201,168,76,0.4);
+  letter-spacing: -0.01em;
+}
+
+h1.game-title span { color: var(--cream); }
+
+.intro-subtitle {
+  font-size: 1rem;
+  color: var(--text-on-felt);
+  max-width: 480px;
+  line-height: 1.7;
+  font-weight: 400;
+}
+
+.phase-cards {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  max-width: 700px;
+}
+
+.phase-card-info {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-gold);
+  border-radius: 16px;
+  padding: 1.25rem 1.5rem;
+  text-align: left;
+  flex: 1;
+  min-width: 200px;
+  max-width: 220px;
+}
+
+.phase-card-info .ph-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--gold);
+  line-height: 1;
+  margin-bottom: 0.4rem;
+}
+
+.phase-card-info .ph-title {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+  margin-bottom: 0.4rem;
+}
+
+.phase-card-info .ph-desc {
+  font-size: 0.85rem;
+  color: var(--text-on-felt);
+  line-height: 1.5;
+}
+
+.btn-start {
+  background: linear-gradient(135deg, var(--gold), #a07830);
+  color: var(--felt-dark);
+  border: none;
+  border-radius: 14px;
+  padding: 1rem 3rem;
+  font-family: 'Playfair Display', serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 20px rgba(201,168,76,0.3);
+  letter-spacing: 0.02em;
+}
+.btn-start:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(201,168,76,0.5); }
+
+/* ====== GAME HEADER ====== */
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.8rem 2rem;
+  border-bottom: 1px solid var(--border-gold);
+  background: rgba(10,20,15,0.7);
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.header-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.3rem;
+  color: var(--gold-light);
+  font-weight: 700;
+}
+
+.hud-stats {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.hud-stat {
+  text-align: center;
+}
+
+.hud-val {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: var(--gold-light);
+  line-height: 1;
+}
+
+.hud-label {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.phase-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(201,168,76,0.1);
+  border: 1px solid var(--border-gold);
+  border-radius: 100px;
+  padding: 0.35rem 1rem;
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.75rem;
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.phase-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  animation: blink 1.5s infinite;
+}
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+/* ====== TRAINING PHASE ====== */
+#training {
+  padding: 1.5rem 2rem;
+  gap: 1.5rem;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.section-header h2 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--gold-light);
+}
+
+.section-header .badge { flex-shrink: 0; }
+
+.training-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 1.5rem;
+}
+
+/* Card grid */
+.training-card-grid {
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border-gold);
+  border-radius: 18px;
+  padding: 1.5rem;
+}
+
+.tcg-label {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  margin-bottom: 1rem;
+}
+
+.card-row-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+/* Pattern notes panel */
+.patterns-panel {
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--border-gold);
+  border-radius: 18px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.patterns-panel h3 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1rem;
+  color: var(--gold-light);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pattern-input-area {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(201,168,76,0.2);
+  border-radius: 10px;
+  padding: 0.75rem;
+  width: 100%;
+  color: var(--cream);
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.85rem;
+  resize: none;
+  height: 120px;
+  outline: none;
+  transition: border-color 0.2s;
+  line-height: 1.6;
+}
+
+.pattern-input-area::placeholder { color: var(--text-dim); }
+.pattern-input-area:focus { border-color: var(--gold); }
+
+.auto-patterns {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.auto-pattern-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(201,168,76,0.06);
+  border: 1px solid rgba(201,168,76,0.15);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+  color: var(--text-on-felt);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.auto-pattern-item:hover, .auto-pattern-item.selected {
+  background: rgba(201,168,76,0.15);
+  border-color: var(--gold);
+  color: var(--gold-light);
+}
+
+.auto-pattern-item .pat-icon { font-size: 1rem; }
+
+.btn-ready {
+  background: linear-gradient(135deg, #2a6a3a, #1a4a2a);
+  color: var(--score-green);
+  border: 1px solid rgba(82,196,122,0.4);
+  border-radius: 12px;
+  padding: 0.85rem;
+  font-family: 'Playfair Display', serif;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+  letter-spacing: 0.02em;
+}
+.btn-ready:hover { background: linear-gradient(135deg, #336a44, #224a2e); transform: translateY(-2px); }
+
+/* ====== TESTING PHASE ====== */
+#testing {
+  padding: 1.5rem 2rem;
+  gap: 1.5rem;
+}
+
+.testing-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+/* Reveal zone */
+.reveal-zone {
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--border-gold);
+  border-radius: 18px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  text-align: center;
+}
+
+.reveal-zone h3 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.1rem;
+  color: var(--gold-light);
+}
+
+.cards-remaining {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.face-down-stack {
+  position: relative;
+  width: 140px;
+  height: 200px;
+}
+
+.face-down-stack .card {
+  position: absolute;
+}
+
+.face-down-stack .card:nth-child(1) { top: 8px; left: 8px; }
+.face-down-stack .card:nth-child(2) { top: 4px; left: 4px; }
+.face-down-stack .card:nth-child(3) { top: 0; left: 0; z-index: 3; }
+
+/* Prediction zone */
+.prediction-zone {
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--border-gold);
+  border-radius: 18px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.prediction-zone h3 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.1rem;
+  color: var(--gold-light);
+}
+
+.prediction-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.pred-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.pred-label {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+}
+
+.pred-select {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(201,168,76,0.3);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  color: var(--cream);
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23c9a84c' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.8rem center;
+  padding-right: 2rem;
+}
+
+.pred-select:focus { border-color: var(--gold); }
+.pred-select option { background: #1a3a2a; }
+
+.prediction-confidence {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.conf-label {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  display: flex;
+  justify-content: space-between;
+}
+
+.conf-label span { color: var(--gold); font-weight: 700; }
+
+.conf-slider {
+  width: 100%;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+.pattern-basis {
+  background: rgba(201,168,76,0.05);
+  border: 1px solid rgba(201,168,76,0.15);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.pattern-basis::placeholder { color: #5a7a6a; }
+
+.btn-predict {
+  background: linear-gradient(135deg, var(--gold), #a07830);
+  color: var(--felt-dark);
+  border: none;
+  border-radius: 12px;
+  padding: 0.85rem;
+  font-family: 'Playfair Display', serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+.btn-predict:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(201,168,76,0.4); }
+.btn-predict:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* Result reveal */
+.result-reveal {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border-gold);
+  border-radius: 18px;
+  text-align: center;
+}
+
+.result-reveal.show { display: flex; }
+
+.result-banner {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.6rem;
+  font-weight: 900;
+}
+.result-banner.correct { color: var(--score-green); }
+.result-banner.wrong { color: var(--score-red); }
+.result-banner.partial { color: var(--accent-amber); }
+
+.result-comparison {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.result-col { text-align: center; }
+.result-col .rc-label {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+
+.vs-arrow { color: var(--gold); font-size: 1.5rem; }
+
+.points-earned {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.9rem;
+  padding: 0.4rem 1rem;
+  border-radius: 100px;
+  font-weight: 700;
+}
+.points-earned.pos { background: rgba(82,196,122,0.15); color: var(--score-green); border: 1px solid rgba(82,196,122,0.3); }
+.points-earned.neg { background: rgba(224,85,85,0.1); color: var(--score-red); border: 1px solid rgba(224,85,85,0.2); }
+
+.btn-next {
+  background: linear-gradient(135deg, #2a3a6a, #1a2a4a);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(77,217,192,0.3);
+  border-radius: 12px;
+  padding: 0.75rem 2rem;
+  font-family: 'Playfair Display', serif;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-next:hover { background: linear-gradient(135deg, #334080, #223060); transform: translateY(-2px); }
+
+/* Scoreboard bottom */
+.scoreboard-strip {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--border-gold);
+  border-radius: 14px;
+  padding: 1rem 1.5rem;
+  overflow-x: auto;
+}
+
+.scoreboard-strip table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  min-width: 500px;
+}
+
+.scoreboard-strip th {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  padding: 0.4rem 0.8rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(201,168,76,0.15);
+}
+
+.scoreboard-strip td {
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--text-on-felt);
+}
+
+.scoreboard-strip tr:last-child td { border-bottom: none; }
+
+.td-correct { color: var(--score-green); font-weight: 700; }
+.td-wrong { color: var(--score-red); font-weight: 700; }
+.td-partial { color: var(--accent-amber); font-weight: 700; }
+
+/* ====== RESULTS SCREEN ====== */
+#results {
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  gap: 1.5rem;
+}
+
+.results-main {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border-gold);
+  border-radius: 24px;
+  padding: 3rem;
+  max-width: 650px;
+  width: 100%;
+}
+
+.results-trophy { font-size: 4rem; margin-bottom: 0.5rem; }
+
+.results-score-big {
+  font-family: 'Playfair Display', serif;
+  font-size: 5rem;
+  font-weight: 900;
+  color: var(--gold-light);
+  line-height: 1;
+  text-shadow: 0 0 40px rgba(201,168,76,0.4);
+}
+
+.results-grade {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 2rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-box {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(201,168,76,0.15);
+  border-radius: 12px;
+  padding: 1rem 0.5rem;
+}
+
+.stat-box .sv {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.8rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.stat-box .sl {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 0.2rem;
+}
+
+.ai-insights {
+  background: rgba(77,217,192,0.06);
+  border: 1px solid rgba(77,217,192,0.2);
+  border-radius: 14px;
+  padding: 1.5rem;
+  text-align: left;
+  margin-bottom: 1.5rem;
+}
+
+.ai-insights h3 {
+  font-family: 'Playfair Display', serif;
+  font-size: 1rem;
+  color: var(--accent-cyan);
+  margin-bottom: 1rem;
+}
+
+.insight-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.7rem;
+  font-size: 0.85rem;
+  color: var(--text-on-felt);
+  line-height: 1.5;
+}
+
+.insight-row::before { content: '→'; color: var(--accent-cyan); font-family: monospace; flex-shrink: 0; }
+
+.result-btn-row {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Progress bar */
+.prog-outer {
+  height: 5px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 100px;
+  overflow: hidden;
+}
+.prog-inner {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--accent-cyan));
+  border-radius: 100px;
+  transition: width 0.4s ease;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--felt-dark);
+  border: 1px solid var(--border-gold);
+  border-radius: 12px;
+  padding: 0.8rem 1.5rem;
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.9rem;
+  color: var(--gold);
+  z-index: 999;
+  transition: transform 0.3s ease;
+  pointer-events: none;
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .training-layout { grid-template-columns: 1fr; }
+  .testing-layout { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .prediction-fields { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== INTRO ===== -->
+<div id="intro" class="screen active">
+  <div class="pill-badge">🤖 Supervised Learning Simulation</div>
+
+  <div class="intro-cards-deco">
+    <div class="card lg red-card">
+      <div class="card-corner-tl"><div class="cr">A</div><div class="cs">♥</div></div>
+      <div class="rank">A</div><div class="suit-symbol">♥</div>
+      <div class="card-corner-br"><div class="cr">A</div><div class="cs">♥</div></div>
+    </div>
+    <div class="card lg black-card">
+      <div class="card-corner-tl"><div class="cr">K</div><div class="cs">♠</div></div>
+      <div class="rank">K</div><div class="suit-symbol">♠</div>
+      <div class="card-corner-br"><div class="cr">K</div><div class="cs">♠</div></div>
+    </div>
+    <div class="card lg red-card">
+      <div class="card-corner-tl"><div class="cr">7</div><div class="cs">♦</div></div>
+      <div class="rank">7</div><div class="suit-symbol">♦</div>
+      <div class="card-corner-br"><div class="cr">7</div><div class="cs">♦</div></div>
+    </div>
+    <div class="card lg black-card">
+      <div class="card-corner-tl"><div class="cr">J</div><div class="cs">♣</div></div>
+      <div class="rank">J</div><div class="suit-symbol">♣</div>
+      <div class="card-corner-br"><div class="cr">J</div><div class="cs">♠</div></div>
+    </div>
+  </div>
+
+  <h1 class="game-title">Predict the <span>Card</span></h1>
+  <p class="intro-subtitle">Train your brain like an AI — spot patterns in your training data, then make predictions on cards you've never seen.</p>
+
+  <div class="phase-cards">
+    <div class="phase-card-info">
+      <div class="ph-num">01</div>
+      <div class="ph-title">Training Phase</div>
+      <div class="ph-desc">Study 20 face-up cards. Find patterns in color, suit, rank, and sequence to build your prediction model.</div>
+    </div>
+    <div class="phase-card-info">
+      <div class="ph-num">02</div>
+      <div class="ph-title">Testing Phase</div>
+      <div class="ph-desc">Predict 12 unseen cards using your observed patterns. Score points for correct predictions!</div>
+    </div>
+    <div class="phase-card-info">
+      <div class="ph-num">03</div>
+      <div class="ph-title">Reflect</div>
+      <div class="ph-desc">See how your accuracy compares — and discover what this reveals about how AI really learns.</div>
+    </div>
+  </div>
+
+  <button class="btn-start" onclick="startGame()">Deal the Cards ♠</button>
+</div>
+
+<!-- ===== TRAINING PHASE ===== -->
+<div id="training" class="screen">
+  <div class="game-header">
+    <div class="header-title">♣ Predict the Card</div>
+    <div class="hud-stats">
+      <div class="hud-stat">
+        <div class="hud-val" id="t-score">0</div>
+        <div class="hud-label">Score</div>
+      </div>
+      <div class="hud-stat">
+        <div class="hud-val" id="t-correct">0</div>
+        <div class="hud-label">Correct</div>
+      </div>
+    </div>
+    <div class="phase-pill"><div class="phase-dot"></div>Phase 1 — Training</div>
+  </div>
+
+  <div class="section-header">
+    <h2>📖 Your Training Data — Study these 20 cards</h2>
+    <div class="pill-badge badge">10 min</div>
+  </div>
+
+  <div class="training-layout">
+    <div class="training-card-grid">
+      <div class="tcg-label">Training Set — 20 cards revealed by the AI system</div>
+      <div class="card-row-grid" id="trainingCardGrid">
+        <!-- rendered by JS -->
+      </div>
+    </div>
+
+    <div class="patterns-panel">
+      <h3>🔍 Pattern Notebook</h3>
+
+      <div style="font-size:0.82rem;color:var(--text-dim);line-height:1.5;">
+        Look at the cards. What patterns do you notice? Click any below or write your own.
+      </div>
+
+      <div class="auto-patterns" id="autoPatterns">
+        <!-- filled by JS based on actual deck -->
+      </div>
+
+      <textarea class="pattern-input-area" id="userNotes" placeholder="Write your own pattern observations here...
+e.g. 'Every 4th card is a heart'
+'Red cards seem to be higher value'
+'Clubs come in pairs'"></textarea>
+
+      <div style="font-size:0.78rem;color:var(--text-dim);">
+        💡 Tip: Just like AI training, more diverse patterns = better predictions!
+      </div>
+
+      <div class="prog-outer">
+        <div class="prog-inner" id="readyProg" style="width:0%"></div>
+      </div>
+      <div style="font-family:'Inconsolata',monospace;font-size:0.72rem;color:var(--text-dim);" id="readyHint">Select at least 2 patterns to proceed</div>
+
+      <button class="btn-ready" id="readyBtn" onclick="startTesting()" disabled>
+        ✓ I'm Ready — Start Testing Phase
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TESTING PHASE ===== -->
+<div id="testing" class="screen">
+  <div class="game-header">
+    <div class="header-title">♦ Predict the Card</div>
+    <div class="hud-stats">
+      <div class="hud-stat">
+        <div class="hud-val" id="score-display">0</div>
+        <div class="hud-label">Score</div>
+      </div>
+      <div class="hud-stat">
+        <div class="hud-val" id="correct-display">0</div>
+        <div class="hud-label">✓ Correct</div>
+      </div>
+      <div class="hud-stat">
+        <div class="hud-val" id="card-display">1/12</div>
+        <div class="hud-label">Card</div>
+      </div>
+      <div class="hud-stat">
+        <div class="hud-val" id="streak-display">0</div>
+        <div class="hud-label">🔥 Streak</div>
+      </div>
+    </div>
+    <div class="phase-pill"><div class="phase-dot" style="background:var(--accent-cyan)"></div>Phase 2 — Testing</div>
+  </div>
+
+  <div class="section-header">
+    <h2>🎯 Testing Phase — Predict each unseen card</h2>
+    <div class="pill-badge badge">15 min</div>
+  </div>
+
+  <div style="margin-bottom:0.5rem;">
+    <div class="prog-outer">
+      <div class="prog-inner" id="testProg" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div class="testing-layout">
+    <!-- Left: card reveal -->
+    <div class="reveal-zone">
+      <h3>🃏 Mystery Card</h3>
+      <div class="cards-remaining" id="cardsRemaining">12 cards remaining</div>
+
+      <div id="faceDownStack" class="face-down-stack">
+        <div class="card xl face-down"></div>
+        <div class="card xl face-down"></div>
+        <div class="card xl face-down"></div>
+      </div>
+
+      <div id="revealedCard" style="display:none">
+        <!-- shown after prediction -->
+      </div>
+
+      <!-- Pattern reference mini -->
+      <div style="width:100%;background:rgba(0,0,0,0.2);border:1px solid rgba(201,168,76,0.15);border-radius:10px;padding:0.75rem;">
+        <div style="font-family:'Inconsolata',monospace;font-size:0.65rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:0.4rem;">Your Pattern Notes</div>
+        <div style="font-size:0.78rem;color:var(--text-on-felt);line-height:1.5;" id="patternRef">—</div>
+      </div>
+    </div>
+
+    <!-- Right: prediction form + result -->
+    <div style="display:flex;flex-direction:column;gap:1rem;">
+      <div class="prediction-zone" id="predictionZone">
+        <h3>🤔 Make Your Prediction</h3>
+
+        <div class="prediction-fields">
+          <div class="pred-field">
+            <div class="pred-label">Suit</div>
+            <select class="pred-select" id="predSuit">
+              <option value="">— Choose suit —</option>
+              <option value="♠">♠ Spades</option>
+              <option value="♥">♥ Hearts</option>
+              <option value="♦">♦ Diamonds</option>
+              <option value="♣">♣ Clubs</option>
+            </select>
+          </div>
+          <div class="pred-field">
+            <div class="pred-label">Rank</div>
+            <select class="pred-select" id="predRank">
+              <option value="">— Choose rank —</option>
+              <option>A</option><option>2</option><option>3</option><option>4</option>
+              <option>5</option><option>6</option><option>7</option><option>8</option>
+              <option>9</option><option>10</option><option>J</option><option>Q</option><option>K</option>
+            </select>
+          </div>
+          <div class="pred-field">
+            <div class="pred-label">Color</div>
+            <select class="pred-select" id="predColor">
+              <option value="">— Choose color —</option>
+              <option value="red">🔴 Red</option>
+              <option value="black">⚫ Black</option>
+            </select>
+          </div>
+          <div class="pred-field">
+            <div class="pred-label">High / Low</div>
+            <select class="pred-select" id="predHighLow">
+              <option value="">— Choose —</option>
+              <option value="high">High (8–K)</option>
+              <option value="low">Low (A–7)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="prediction-confidence">
+          <div class="conf-label">Confidence Level <span id="confVal">50%</span></div>
+          <input type="range" class="conf-slider" id="confSlider" min="10" max="100" step="10" value="50" oninput="document.getElementById('confVal').textContent=this.value+'%'">
+        </div>
+
+        <div class="pred-field">
+          <div class="pred-label">Pattern Used</div>
+          <input type="text" class="pattern-basis" id="predBasis" placeholder="e.g. 'alternating colors pattern'">
+        </div>
+
+        <button class="btn-predict" id="predictBtn" onclick="submitPrediction()">
+          🎯 Reveal the Card!
+        </button>
+      </div>
+
+      <!-- Result reveal -->
+      <div class="result-reveal" id="resultReveal">
+        <div class="result-banner" id="resultBanner">Correct!</div>
+        <div class="result-comparison" id="resultComparison"></div>
+        <div class="points-earned" id="pointsEarned">+10 pts</div>
+        <div style="font-size:0.82rem;color:var(--text-dim);line-height:1.5;" id="resultExplanation"></div>
+        <button class="btn-next" id="nextBtn" onclick="nextCard()">Next Card →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scoreboard -->
+  <div class="scoreboard-strip">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Predicted Suit</th>
+          <th>Predicted Rank</th>
+          <th>Actual Card</th>
+          <th>Color ✓</th>
+          <th>Suit ✓</th>
+          <th>Rank ✓</th>
+          <th>Points</th>
+        </tr>
+      </thead>
+      <tbody id="scoreTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== RESULTS ===== -->
+<div id="results" class="screen">
+  <div class="results-main">
+    <div class="results-trophy" id="resTrophy">🏆</div>
+    <div class="results-score-big" id="resFinalScore">0</div>
+    <div class="results-grade" id="resGrade" style="color:var(--gold)">Model Accuracy</div>
+    <div class="gold-divider" style="margin: 1.5rem 0;"></div>
+
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="sv" style="color:var(--score-green)" id="resCorrect">0</div>
+        <div class="sl">Full Correct</div>
+      </div>
+      <div class="stat-box">
+        <div class="sv" style="color:var(--accent-amber)" id="resPartial">0</div>
+        <div class="sl">Partial Hit</div>
+      </div>
+      <div class="stat-box">
+        <div class="sv" style="color:var(--score-red)" id="resWrong">0</div>
+        <div class="sl">Misses</div>
+      </div>
+      <div class="stat-box">
+        <div class="sv" style="color:var(--accent-cyan)" id="resStreak">0</div>
+        <div class="sl">Best Streak</div>
+      </div>
+    </div>
+
+    <div class="ai-insights">
+      <h3>🧠 What Your Game Reveals About AI</h3>
+      <div class="insight-row">Your <strong>Training Phase</strong> mirrors how AI models learn — the more patterns you identified, the better your "model" performed in testing.</div>
+      <div class="insight-row">When you picked only one pattern to rely on, predictions got worse — that's <strong>overfitting</strong>, a real AI problem.</div>
+      <div class="insight-row"><strong>Confidence scores</strong> you gave each prediction reflect how AI assigns probability values — not just yes/no, but how sure the model is.</div>
+      <div class="insight-row">Cards you couldn't predict highlight <strong>noise in the data</strong> — random patterns AI systems also struggle with.</div>
+      <div class="insight-row">Your score represents your model's <strong>accuracy</strong> — real AI benchmarks work the same way: predicted vs. actual outcomes.</div>
+    </div>
+
+    <div class="result-btn-row">
+      <button class="btn-start" onclick="startGame()">Play Again ♠</button>
+      <button class="btn-ready" style="padding:1rem 2rem;width:auto;" onclick="showScreen('intro')">← Main Menu</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// CARD DATA
+// ============================================================
+const SUITS = ['♠','♥','♦','♣'];
+const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const RED_SUITS = ['♥','♦'];
+
+function isRed(suit) { return RED_SUITS.includes(suit); }
+function isHigh(rank) { return ['8','9','10','J','Q','K'].includes(rank); }
+
+function buildDeck() {
+  const deck = [];
+  SUITS.forEach(suit => {
+    RANKS.forEach(rank => {
+      deck.push({ suit, rank, color: isRed(suit) ? 'red' : 'black', high: isHigh(rank) });
+    });
+  });
+  return shuffle(deck);
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+let deck = [];
+let trainingCards = [];
+let testCards = [];
+let currentTestIndex = 0;
+let score = 0;
+let correct = 0;
+let partial = 0;
+let wrong = 0;
+let streak = 0;
+let bestStreak = 0;
+let selectedPatterns = new Set();
+let history = [];
+
+const TRAINING_COUNT = 20;
+const TEST_COUNT = 12;
+
+// Pattern detectors
+function analyzeTraining(cards) {
+  const patterns = [];
+
+  // Color distribution
+  const reds = cards.filter(c => c.color === 'red').length;
+  const blacks = cards.length - reds;
+  if (reds > blacks + 3) patterns.push({ icon: '🔴', text: `Red cards dominate (${reds} red vs ${blacks} black)` });
+  else if (blacks > reds + 3) patterns.push({ icon: '⚫', text: `Black cards dominate (${blacks} black vs ${reds} red)` });
+  else patterns.push({ icon: '🔴⚫', text: `Colors roughly balanced (${reds} red, ${blacks} black)` });
+
+  // Suit frequency
+  const suitCount = {};
+  SUITS.forEach(s => { suitCount[s] = cards.filter(c => c.suit === s).length; });
+  const topSuit = Object.entries(suitCount).sort((a,b) => b[1]-a[1])[0];
+  patterns.push({ icon: topSuit[0], text: `Most common suit: ${topSuit[0]} (appears ${topSuit[1]} times)` });
+
+  // High/Low ratio
+  const highs = cards.filter(c => c.high).length;
+  const lows = cards.length - highs;
+  if (highs > lows) patterns.push({ icon: '⬆️', text: `High cards (8–K) are more frequent: ${highs} vs ${lows}` });
+  else patterns.push({ icon: '⬇️', text: `Low cards (A–7) are more frequent: ${lows} vs ${highs}` });
+
+  // Alternating colors check (first 8)
+  let altCount = 0;
+  for (let i = 1; i < Math.min(8, cards.length); i++) {
+    if (cards[i].color !== cards[i-1].color) altCount++;
+  }
+  if (altCount >= 5) patterns.push({ icon: '🔄', text: `Colors appear to alternate frequently in sequence` });
+
+  // Face cards (J, Q, K)
+  const faceCount = cards.filter(c => ['J','Q','K'].includes(c.rank)).length;
+  patterns.push({ icon: '👑', text: `Face cards (J/Q/K): ${faceCount} out of ${cards.length}` });
+
+  // Consecutive rank pairs
+  let pairs = 0;
+  for (let i = 1; i < cards.length; i++) {
+    const ri = RANKS.indexOf(cards[i].rank);
+    const rp = RANKS.indexOf(cards[i-1].rank);
+    if (Math.abs(ri - rp) === 1) pairs++;
+  }
+  if (pairs >= 4) patterns.push({ icon: '🔢', text: `Consecutive ranks appear together ${pairs} times` });
+
+  return patterns;
+}
+
+// ============================================================
+// CARD RENDERING
+// ============================================================
+function renderCardEl(card, size = '') {
+  const colorClass = card.color === 'red' ? 'red-card' : 'black-card';
+  const el = document.createElement('div');
+  el.className = `card ${colorClass} ${size}`;
+  el.innerHTML = `
+    <div class="card-corner-tl"><div class="cr">${card.rank}</div><div class="cs">${card.suit}</div></div>
+    <div class="rank">${card.rank}</div>
+    <div class="suit-symbol">${card.suit}</div>
+    <div class="card-corner-br"><div class="cr">${card.rank}</div><div class="cs">${card.suit}</div></div>
+  `;
+  return el;
+}
+
+function renderCardHTML(card, size = '') {
+  const colorClass = card.color === 'red' ? 'red-card' : 'black-card';
+  return `<div class="card ${colorClass} ${size} flip-in">
+    <div class="card-corner-tl"><div class="cr">${card.rank}</div><div class="cs">${card.suit}</div></div>
+    <div class="rank">${card.rank}</div>
+    <div class="suit-symbol">${card.suit}</div>
+    <div class="card-corner-br"><div class="cr">${card.rank}</div><div class="cs">${card.suit}</div></div>
+  </div>`;
+}
+
+// ============================================================
+// SCREENS
+// ============================================================
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function startGame() {
+  deck = buildDeck();
+  trainingCards = deck.slice(0, TRAINING_COUNT);
+  testCards = deck.slice(TRAINING_COUNT, TRAINING_COUNT + TEST_COUNT);
+  currentTestIndex = 0;
+  score = 0; correct = 0; partial = 0; wrong = 0; streak = 0; bestStreak = 0;
+  selectedPatterns = new Set();
+  history = [];
+
+  // Render training cards
+  const grid = document.getElementById('trainingCardGrid');
+  grid.innerHTML = '';
+  trainingCards.forEach((card, i) => {
+    const el = renderCardEl(card, '');
+    el.style.animationDelay = `${i * 40}ms`;
+    el.style.animation = 'flipIn 0.4s ease forwards';
+    el.style.opacity = '0';
+    grid.appendChild(el);
+  });
+
+  // Build auto patterns
+  const patterns = analyzeTraining(trainingCards);
+  const apDiv = document.getElementById('autoPatterns');
+  apDiv.innerHTML = '';
+  patterns.forEach((p, i) => {
+    const el = document.createElement('div');
+    el.className = 'auto-pattern-item';
+    el.dataset.idx = i;
+    el.innerHTML = `<span class="pat-icon">${p.icon}</span><span>${p.text}</span>`;
+    el.addEventListener('click', () => {
+      el.classList.toggle('selected');
+      if (el.classList.contains('selected')) selectedPatterns.add(i);
+      else selectedPatterns.delete(i);
+      updateReadyState();
+    });
+    apDiv.appendChild(el);
+  });
+
+  document.getElementById('readyBtn').disabled = true;
+  document.getElementById('readyProg').style.width = '0%';
+  document.getElementById('readyHint').textContent = 'Select at least 2 patterns to proceed';
+  document.getElementById('userNotes').value = '';
+  document.getElementById('t-score').textContent = '0';
+  document.getElementById('t-correct').textContent = '0';
+
+  showScreen('training');
+}
+
+function updateReadyState() {
+  const count = selectedPatterns.size;
+  const pct = Math.min(count / 3 * 100, 100);
+  document.getElementById('readyProg').style.width = pct + '%';
+
+  if (count >= 2) {
+    document.getElementById('readyBtn').disabled = false;
+    document.getElementById('readyHint').textContent = `✓ ${count} pattern${count>1?'s':''} selected — ready to test!`;
+  } else {
+    document.getElementById('readyBtn').disabled = true;
+    document.getElementById('readyHint').textContent = `Select at least 2 patterns (${count} selected)`;
+  }
+}
+
+function startTesting() {
+  // Build pattern reference text
+  const notes = document.getElementById('userNotes').value.trim();
+  const selectedText = [...selectedPatterns].map(i => {
+    const items = document.querySelectorAll('.auto-pattern-item');
+    return items[i]?.textContent?.trim() || '';
+  }).filter(Boolean).join(' | ');
+  const allNotes = [selectedText, notes].filter(Boolean).join('\n');
+  document.getElementById('patternRef').textContent = allNotes || 'No patterns noted';
+
+  // Reset test UI
+  document.getElementById('scoreTableBody').innerHTML = '';
+  document.getElementById('score-display').textContent = '0';
+  document.getElementById('correct-display').textContent = '0';
+  document.getElementById('card-display').textContent = `1/${TEST_COUNT}`;
+  document.getElementById('streak-display').textContent = '0';
+  document.getElementById('testProg').style.width = '0%';
+  document.getElementById('resultReveal').classList.remove('show');
+
+  resetPredictionForm();
+  updateStackUI();
+  showScreen('testing');
+}
+
+function updateStackUI() {
+  const remaining = TEST_COUNT - currentTestIndex;
+  document.getElementById('cardsRemaining').textContent = `${remaining} card${remaining!==1?'s':''} remaining`;
+  document.getElementById('card-display').textContent = `${currentTestIndex + 1}/${TEST_COUNT}`;
+  document.getElementById('testProg').style.width = `${(currentTestIndex / TEST_COUNT) * 100}%`;
+
+  const stack = document.getElementById('faceDownStack');
+  if (remaining === 0) {
+    stack.innerHTML = '<div style="font-size:2rem;color:var(--text-dim)">🃏 All done!</div>';
+  } else if (remaining === 1) {
+    stack.innerHTML = '<div class="card xl face-down" style="position:absolute;top:0;left:0;"></div>';
+  } else if (remaining === 2) {
+    stack.innerHTML = `<div class="card xl face-down" style="position:absolute;top:4px;left:4px;"></div>
+                       <div class="card xl face-down" style="position:absolute;top:0;left:0;z-index:3;"></div>`;
+  } else {
+    stack.innerHTML = `<div class="card xl face-down" style="position:absolute;top:8px;left:8px;"></div>
+                       <div class="card xl face-down" style="position:absolute;top:4px;left:4px;"></div>
+                       <div class="card xl face-down" style="position:absolute;top:0;left:0;z-index:3;"></div>`;
+  }
+}
+
+function resetPredictionForm() {
+  document.getElementById('predSuit').value = '';
+  document.getElementById('predRank').value = '';
+  document.getElementById('predColor').value = '';
+  document.getElementById('predHighLow').value = '';
+  document.getElementById('confSlider').value = 50;
+  document.getElementById('confVal').textContent = '50%';
+  document.getElementById('predBasis').value = '';
+  document.getElementById('predictBtn').disabled = false;
+  document.getElementById('resultReveal').classList.remove('show');
+  document.getElementById('revealedCard').style.display = 'none';
+  document.getElementById('faceDownStack').style.display = 'block';
+  document.getElementById('predictionZone').style.display = 'flex';
+}
+
+function submitPrediction() {
+  const predSuit = document.getElementById('predSuit').value;
+  const predRank = document.getElementById('predRank').value;
+  const predColor = document.getElementById('predColor').value;
+  const predHighLow = document.getElementById('predHighLow').value;
+  const confidence = parseInt(document.getElementById('confSlider').value);
+  const basis = document.getElementById('predBasis').value || '—';
+
+  if (!predSuit && !predRank && !predColor && !predHighLow) {
+    showToast('Make at least one prediction before revealing!');
+    return;
+  }
+
+  const actual = testCards[currentTestIndex];
+
+  // Scoring
+  let pts = 0;
+  let colorCorrect = false, suitCorrect = false, rankCorrect = false;
+
+  if (predColor) colorCorrect = predColor === actual.color;
+  if (predSuit) suitCorrect = predSuit === actual.suit;
+  if (predRank) rankCorrect = predRank === actual.rank;
+  const highLowCorrect = predHighLow ? predHighLow === (actual.high ? 'high' : 'low') : null;
+
+  if (suitCorrect && rankCorrect) { pts = 15; correct++; streak++; }
+  else if (suitCorrect) { pts = 8; partial++; streak = 0; }
+  else if (rankCorrect) { pts = 6; partial++; streak = 0; }
+  else if (colorCorrect) { pts = 3; partial++; streak = 0; }
+  else { pts = 0; wrong++; streak = 0; }
+
+  // Confidence bonus: high confidence + correct = bonus
+  if ((suitCorrect || rankCorrect) && confidence >= 80) pts += 5;
+  // Confidence penalty: high confidence + wrong = penalty
+  if (!suitCorrect && !rankCorrect && !colorCorrect && confidence >= 80) pts = Math.max(0, pts - 3);
+
+  score += pts;
+  bestStreak = Math.max(bestStreak, streak);
+
+  const resultType = (suitCorrect && rankCorrect) ? 'correct' : pts > 0 ? 'partial' : 'wrong';
+
+  // Record history
+  history.push({ card: currentTestIndex + 1, predSuit, predRank, actual, colorCorrect, suitCorrect, rankCorrect, pts, basis, resultType });
+
+  // Show result
+  showResult(actual, predSuit, predRank, pts, resultType, colorCorrect, suitCorrect, rankCorrect, highLowCorrect);
+
+  // Update HUD
+  document.getElementById('score-display').textContent = score;
+  document.getElementById('correct-display').textContent = correct;
+  document.getElementById('streak-display').textContent = streak > 0 ? `${streak}🔥` : '0';
+
+  // Add to scoreboard
+  addScoreRow(currentTestIndex + 1, predSuit, predRank, actual, colorCorrect, suitCorrect, rankCorrect, pts);
+
+  // Hide face down, show actual
+  document.getElementById('faceDownStack').style.display = 'none';
+  const revDiv = document.getElementById('revealedCard');
+  revDiv.style.display = 'flex';
+  revDiv.innerHTML = renderCardHTML(actual, 'xl');
+
+  document.getElementById('predictBtn').disabled = true;
+  document.getElementById('predictionZone').style.display = 'none';
+  document.getElementById('resultReveal').classList.add('show');
+
+  // Scroll to result
+  document.getElementById('resultReveal').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function showResult(actual, predSuit, predRank, pts, type, colorOk, suitOk, rankOk, hlOk) {
+  const banner = document.getElementById('resultBanner');
+  const comparison = document.getElementById('resultComparison');
+  const pointsEl = document.getElementById('pointsEarned');
+  const expEl = document.getElementById('resultExplanation');
+
+  if (type === 'correct') {
+    banner.textContent = '🎉 Perfect Prediction!';
+    banner.className = 'result-banner correct';
+  } else if (type === 'partial') {
+    banner.textContent = '⚡ Partial Hit!';
+    banner.className = 'result-banner partial';
+  } else {
+    banner.textContent = '❌ Miss — But You Learned!';
+    banner.className = 'result-banner wrong';
+  }
+
+  const predText = [predSuit, predRank].filter(Boolean).join(' ') || '(no prediction)';
+  comparison.innerHTML = `
+    <div class="result-col">
+      <div class="rc-label">You Predicted</div>
+      <div style="font-family:'Playfair Display',serif;font-size:1.4rem;font-weight:900;color:${predText==='(no prediction)'?'var(--text-dim)':'var(--text-on-felt)'}">${predText}</div>
+    </div>
+    <div class="vs-arrow">→</div>
+    <div class="result-col">
+      <div class="rc-label">Actual Card</div>
+      <div style="font-family:'Playfair Display',serif;font-size:1.4rem;font-weight:900;color:${actual.color==='red'?'var(--score-red)':'var(--cream)'}">${actual.suit} ${actual.rank}</div>
+    </div>
+  `;
+
+  pointsEl.textContent = pts > 0 ? `+${pts} pts` : '0 pts';
+  pointsEl.className = `points-earned ${pts > 0 ? 'pos' : 'neg'}`;
+
+  const breakdown = [];
+  if (colorOk !== undefined) breakdown.push(colorOk ? '✓ Color correct (+3)' : '✗ Color wrong');
+  if (suitOk !== undefined) breakdown.push(suitOk ? '✓ Suit correct (+8)' : '✗ Suit wrong');
+  if (rankOk !== undefined) breakdown.push(rankOk ? '✓ Rank correct (+6)' : '✗ Rank wrong');
+
+  expEl.textContent = breakdown.join(' · ');
+
+  // Final card check
+  document.getElementById('nextBtn').textContent = currentTestIndex >= TEST_COUNT - 1 ? 'See Final Results →' : 'Next Card →';
+}
+
+function addScoreRow(num, predSuit, predRank, actual, colorOk, suitOk, rankOk, pts) {
+  const tbody = document.getElementById('scoreTableBody');
+  const tr = document.createElement('tr');
+  const res = suitOk && rankOk ? 'correct' : pts > 0 ? 'partial' : 'wrong';
+  const cls = res === 'correct' ? 'td-correct' : res === 'partial' ? 'td-partial' : 'td-wrong';
+  tr.innerHTML = `
+    <td>${num}</td>
+    <td>${predSuit || '—'}</td>
+    <td>${predRank || '—'}</td>
+    <td class="${cls}" style="color:${actual.color==='red'?'#ee6666':'var(--text-on-felt)'}">${actual.suit} ${actual.rank}</td>
+    <td>${colorOk ? '✓' : '✗'}</td>
+    <td class="${suitOk ? 'td-correct' : 'td-wrong'}">${suitOk ? '✓' : '✗'}</td>
+    <td class="${rankOk ? 'td-correct' : 'td-wrong'}">${rankOk ? '✓' : '✗'}</td>
+    <td style="font-family:'Inconsolata',monospace;color:${pts>0?'var(--score-green)':'var(--score-red)'};font-weight:700">${pts > 0 ? '+'+pts : '0'}</td>
+  `;
+  tbody.appendChild(tr);
+  tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function nextCard() {
+  currentTestIndex++;
+  if (currentTestIndex >= TEST_COUNT) {
+    showResults();
+    return;
+  }
+  updateStackUI();
+  resetPredictionForm();
+  document.getElementById('predictionZone').style.display = 'flex';
+}
+
+function showResults() {
+  showScreen('results');
+  const total = TEST_COUNT;
+  const accuracy = Math.round((correct / total) * 100);
+
+  document.getElementById('resFinalScore').textContent = score;
+  document.getElementById('resCorrect').textContent = correct;
+  document.getElementById('resPartial').textContent = partial;
+  document.getElementById('resWrong').textContent = wrong;
+  document.getElementById('resStreak').textContent = bestStreak;
+
+  let grade, trophy;
+  if (accuracy >= 75) { grade = `${accuracy}% Accuracy — Expert Model 🧠`; trophy = '🏆'; }
+  else if (accuracy >= 50) { grade = `${accuracy}% Accuracy — Solid Predictor ⭐`; trophy = '⭐'; }
+  else if (accuracy >= 30) { grade = `${accuracy}% Accuracy — Keep Training 💡`; trophy = '💡'; }
+  else { grade = `${accuracy}% Accuracy — More Data Needed 📊`; trophy = '📊'; }
+
+  document.getElementById('resTrophy').textContent = trophy;
+  document.getElementById('resGrade').textContent = grade;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
